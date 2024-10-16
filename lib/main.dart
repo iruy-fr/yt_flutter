@@ -31,6 +31,7 @@ class _VideoInfoPageState extends State<VideoInfoPage> {
 
   YoutubePlayerController? _youtubeController;
   Map<String, dynamic>? videoInfo;
+  List<dynamic> comments = [];
   bool isLoading = true;
   String? errorMessage;
 
@@ -38,6 +39,7 @@ class _VideoInfoPageState extends State<VideoInfoPage> {
   void initState() {
     super.initState();
     _fetchVideoInfo();
+    _fetchComments();
     _initializeYoutubePlayer();
   }
 
@@ -46,10 +48,9 @@ class _VideoInfoPageState extends State<VideoInfoPage> {
     _youtubeController = YoutubePlayerController(
       initialVideoId: videoId,
       params: YoutubePlayerParams(
-        autoPlay: false,
+        autoPlay: true,
         showControls: true,
         showFullscreenButton: true,
-
       ),
     );
   }
@@ -66,6 +67,19 @@ class _VideoInfoPageState extends State<VideoInfoPage> {
       setState(() {
         errorMessage = e.toString();
         isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _fetchComments() async{
+    try{
+      final commentData = await getYoutubeComments(videoId, apiKey);
+      setState(() {
+        comments = commentData;
+      });
+    } catch (e){
+      setState(() {
+        errorMessage = e.toString();
       });
     }
   }
@@ -96,8 +110,23 @@ class _VideoInfoPageState extends State<VideoInfoPage> {
             const SizedBox(height: 20),
             Text('Views: ${videoInfo?['viewCount']}'),
             Text('Likes: ${videoInfo?['likeCount']}'),
-            Text('Comments: ${videoInfo?['commentCount']}'),
-            Text('Title: ${videoInfo?['estimatedWatchTime']}'),
+            const SizedBox(height: 20),
+            Text('Comments: '),
+            Expanded(
+              child: ListView.builder(
+                itemCount: comments.length,
+                itemBuilder: (context, index){
+                  var comment = comments[index]['snippet']['topLevelComment']['snippet'];
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundImage: NetworkImage(comment['authorProfileImageUrl']),
+                    ),
+                    title: Text(comment['authorDisplayName']),
+                    subtitle: Text(comment['textDisplay']),
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
@@ -123,5 +152,22 @@ Future<Map<String, dynamic>> getYoutubeVideoInfo(String videoId, String apiKey) 
     }
   } else {
     throw Exception('Failed to load video info');
+  }
+}
+
+Future<List<dynamic>> getYoutubeComments(String videoId, String apiKey) async {
+  final String url = 'https://www.googleapis.com/youtube/v3/commentThreads?part=snippet&videoId=$videoId&key=$apiKey&maxResults=100';
+
+  final response = await http.get(Uri.parse(url));
+
+  if (response.statusCode == 200){
+    final Map<String, dynamic> data = json.decode(response.body);
+    if (data['items'].isNotEmpty) {
+      return data['items'];
+    } else{
+      throw Exception('Sem comentários');
+    }
+  } else {
+    throw Exception('Falha ao carregar comentários');
   }
 }
